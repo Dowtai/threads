@@ -60,55 +60,122 @@ docker-compose --profile inmemory down
 
 Перейдите по этой ссылке в браузере, чтобы открыть **GraphQL Playground**.
 
-### Пример создания поста
-~~~graphql
-mutation CreateSinglePost{
-  createPost(
-    author: "dowtai"
-    title: "try"
-    content: "wow"
-  ){
-    id
-    author
-    title
-    commentsAllowed
-    createdAt
-  }
-}
-~~~
+### Получение списка постов
 
-### Пример запроса создания комментария
-~~~graphql
-mutation CreateComment{
-  createComment(
-    postId: "<id существующего поста>"
-    author: "dowtai"
-    text: "comment text"
-  ){
-    id
-    author
-    text
-    createdAt
-  }
-}
-~~~
+Возвращает список всех постов. 
+Можно сразу запросить вложенные комментарии 
+(также с пагинацией).
 
-### Пример запроса постов и комментариев к ним:
-~~~graphql
-query GetPosts{
-  posts(limit: 5, offset: 0){
+```graphql
+query GetPosts {
+  posts(limit: 10, offset: 0) {
     id
     author
     title
     content
     commentsAllowed
     createdAt
-    comments(limit: 3, offset: 2){
+    comments(limit: 5, offset: 0) {
       id
       author
       text
       createdAt
+      replies(limit: 2, offset: 1) {
+        id
+        author
+        text
+        createdAt
+      }
     }
   }
 }
-~~~
+```
+
+### Получение конкретного поста по ID
+
+```graphql
+query GetSinglePost {
+  post(id: "UUID-вашего-поста") {
+    id
+    title
+    content
+    createdAt
+  }
+}
+```
+
+### Создание поста
+
+Создает новый пост. 
+Поле `commentsAllowed` по умолчанию 
+равно `true`, но его можно передать явно.
+
+```graphql
+mutation CreatePost {
+  createPost(
+    author: "user_123"
+    title: "Мой первый пост"
+    content: "Текст поста..."
+    commentsAllowed: true
+  ) {
+    id
+    title
+    createdAt
+  }
+}
+```
+
+### Создание комментария или ответа
+
+Если не передавать `parentId`, то 
+комментарий будет привязан к самому посту. 
+Если дополнительно передать parentId 
+(ID другого комментария), он станет ответом.
+
+```graphql
+mutation CreateComment {
+  createComment(
+    postId: "UUID-поста"
+    author: "user_456"
+    text: "Отличный пост!"
+  ) {
+    id
+    text
+    createdAt
+  }
+}
+```
+
+### Включение/отключение комментариев
+
+Позволяет автору поста закрыть 
+или открыть возможность комментирования.
+
+```graphql
+mutation ToggleComments {
+  updateCommentsAllowed(
+    postId: "UUID-поста"
+    author: "user_123"
+    allowed: false
+  ) {
+    id
+    commentsAllowed
+  }
+}
+```
+
+### Подписка на новые комментарии у поста
+
+Используется для получения обновлений 
+в реальном времени по протоколу WebSocket.
+
+```graphql
+subscription OnCommentAdded {
+  commentAdded(postId: "UUID-поста") {
+    id
+    author
+    text
+    createdAt
+  }
+}
+```
