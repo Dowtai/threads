@@ -27,13 +27,7 @@ func (r *commentResolver) Replies(ctx context.Context, obj *Comment, limit int32
 		return nil, err
 	}
 
-	intOffset := int(offset)
-	if intOffset > len(comments) {
-		intOffset = len(comments)
-	}
-	intLimit := min(int(limit), len(comments)-intOffset)
-
-	return MapCommentListToGraphQL(comments[intOffset : intOffset+intLimit]), nil
+	return MapCommentListToGraphQL(comments), nil
 }
 
 // CreatePost is the resolver for the createPost field.
@@ -83,13 +77,7 @@ func (r *postResolver) Comments(ctx context.Context, obj *Post, limit int32, off
 		return nil, err
 	}
 
-	intOffset := int(offset)
-	if intOffset > len(comments) {
-		intOffset = len(comments)
-	}
-	intLimit := min(int(limit), len(comments)-intOffset)
-
-	return MapCommentListToGraphQL(comments[intOffset : intOffset+intLimit]), nil
+	return MapCommentListToGraphQL(comments), nil
 }
 
 // Posts is the resolver for the posts field.
