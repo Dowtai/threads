@@ -1,0 +1,35 @@
+services:
+  app-pg:
+    build: .
+    ports:
+      - "8080:8080"
+    profiles: ["postgres"]
+    environment:
+      - STORAGE_TYPE=postgres
+      - DATABASE_URL=postgres://threads_user:secret_password@db:5432/threads_db?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app-mem:
+    build: .
+    ports:
+      - "8080:8080"
+    profiles: ["inmemory"]
+    environment:
+      - STORAGE_TYPE=inmemory
+
+  db:
+    image: postgres:15-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: threads_user
+      POSTGRES_PASSWORD: secret_password
+      POSTGRES_DB: threads_db
+    volumes:
+      - ./.postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U threads_user -d threads_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
