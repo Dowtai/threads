@@ -6,14 +6,18 @@ import (
 	"threads/internal/entity"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type repoImpl struct {
-	pool *pgxpool.Pool
+type DBPool interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-func New(pool *pgxpool.Pool) *repoImpl {
+type repoImpl struct {
+	pool DBPool
+}
+
+func New(pool DBPool) *repoImpl {
 	return &repoImpl{
 		pool: pool,
 	}
@@ -106,16 +110,17 @@ func (r *repoImpl) GetPosts(ctx context.Context, limit, offset int) ([]*entity.P
 }
 
 func (r *repoImpl) StorePost(ctx context.Context, post *entity.Post) (*entity.Post, error) {
-	query := `INSERT INTO posts (id, author, title, content, comments_allowed, created_at) VALUES ($1, $2, $3, $4, $5, $6);`
+	query := `INSERT INTO posts (id, author, title, content, comments_allowed, created_at) 
+							VALUES ($1, $2, $3, $4, $5, NOW() AT TIME ZONE 'utc')
+							RETURNING created_at;`
 
-	_, err := r.pool.Exec(ctx, query,
+	err := r.pool.QueryRow(ctx, query,
 		post.ID,
 		post.Author,
 		post.Title,
 		post.Content,
 		post.CommentsAllowed,
-		post.CreatedAt,
-	)
+	).Scan(&post.CreatedAt)
 
 	if err != nil {
 		return nil, err
@@ -125,16 +130,17 @@ func (r *repoImpl) StorePost(ctx context.Context, post *entity.Post) (*entity.Po
 }
 
 func (r *repoImpl) StoreComment(ctx context.Context, comment *entity.Comment) (*entity.Comment, error) {
-	query := `INSERT INTO comments (id, post_id, parent_id, author, text, created_at) VALUES ($1, $2, $3, $4, $5, $6);`
+	query := `INSERT INTO comments (id, post_id, parent_id, author, text, created_at) 
+							VALUES ($1, $2, $3, $4, $5, NOW() AT TIME ZONE 'utc')
+							RETURNING created_at;`
 
-	_, err := r.pool.Exec(ctx, query,
+	err := r.pool.QueryRow(ctx, query,
 		comment.ID,
 		comment.PostID,
 		comment.ParentID,
 		comment.Author,
 		comment.Text,
-		comment.CreatedAt,
-	)
+	).Scan(&comment.CreatedAt)
 
 	if err != nil {
 		return nil, err
@@ -168,7 +174,7 @@ func (r *repoImpl) UpdateCommentsAllowed(ctx context.Context, postID string, all
 	return post, nil
 }
 
-func (r *repoImpl) GetCommentsByPostIDs(ctx context.Context, keys []entity.ParamKey) (map[entity.ParamKey][]*entity.Comment, error) {
+func (r *repoImpl) getCommentsByIDs(ctx context.Context, keys []entity.ParamKey, query string) (map[entity.ParamKey][]*entity.Comment, error) {
 	ids := make([]string, len(keys))
 	limits := make([]int, len(keys))
 	offsets := make([]int, len(keys))
@@ -178,18 +184,6 @@ func (r *repoImpl) GetCommentsByPostIDs(ctx context.Context, keys []entity.Param
 		limits[i] = key.Limit
 		offsets[i] = key.Offset
 	}
-
-	query := `SELECT
-					req.id, req.limit_val, req.offset_val,
-                    c.id, c.post_id, c.parent_id, c.author, c.text, c.created_at
-              FROM unnest($1::uuid[], $2::int[], $3::int[]) AS req(id, limit_val, offset_val)
-              CROSS JOIN LATERAL(
-                  SELECT id, post_id, parent_id, author, text, created_at
-                  FROM comments
-                  WHERE post_id = req.id AND parent_id IS NULL
-                  ORDER BY created_at DESC
-                  LIMIT req.limit_val OFFSET req.offset_val
-              ) c`
 
 	rows, err := r.pool.Query(ctx, query, ids, limits, offsets)
 	if err != nil {
@@ -241,17 +235,23 @@ func (r *repoImpl) GetCommentsByPostIDs(ctx context.Context, keys []entity.Param
 	return result, nil
 }
 
+func (r *repoImpl) GetCommentsByPostIDs(ctx context.Context, keys []entity.ParamKey) (map[entity.ParamKey][]*entity.Comment, error) {
+	query := `SELECT
+					req.id, req.limit_val, req.offset_val,
+                    c.id, c.post_id, c.parent_id, c.author, c.text, c.created_at
+              FROM unnest($1::uuid[], $2::int[], $3::int[]) AS req(id, limit_val, offset_val)
+              CROSS JOIN LATERAL(
+                  SELECT id, post_id, parent_id, author, text, created_at
+                  FROM comments
+                  WHERE post_id = req.id AND parent_id IS NULL
+                  ORDER BY created_at DESC
+                  LIMIT req.limit_val OFFSET req.offset_val
+              ) c`
+
+	return r.getCommentsByIDs(ctx, keys, query)
+}
+
 func (r *repoImpl) GetRepliesByParentIDs(ctx context.Context, keys []entity.ParamKey) (map[entity.ParamKey][]*entity.Comment, error) {
-	ids := make([]string, len(keys))
-	limits := make([]int, len(keys))
-	offsets := make([]int, len(keys))
-
-	for i, key := range keys {
-		ids[i] = key.Id
-		limits[i] = key.Limit
-		offsets[i] = key.Offset
-	}
-
 	query := `SELECT
 					req.id, req.limit_val, req.offset_val,
                     c.id, c.post_id, c.parent_id, c.author, c.text, c.created_at
@@ -264,52 +264,5 @@ func (r *repoImpl) GetRepliesByParentIDs(ctx context.Context, keys []entity.Para
                   LIMIT req.limit_val OFFSET req.offset_val
               ) c`
 
-	rows, err := r.pool.Query(ctx, query, ids, limits, offsets)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	result := make(map[entity.ParamKey][]*entity.Comment)
-	for rows.Next() {
-		var reqID string
-		var reqLimit int
-		var reqOffset int
-		comment := &entity.Comment{}
-
-		err := rows.Scan(
-			&reqID,
-			&reqLimit,
-			&reqOffset,
-			&comment.ID,
-			&comment.PostID,
-			&comment.ParentID,
-			&comment.Author,
-			&comment.Text,
-			&comment.CreatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		key := entity.ParamKey{
-			Id:     reqID,
-			Limit:  reqLimit,
-			Offset: reqOffset,
-		}
-
-		result[key] = append(result[key], comment)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	for _, key := range keys {
-		if _, ok := result[key]; !ok {
-			result[key] = make([]*entity.Comment, 0)
-		}
-	}
-
-	return result, nil
+	return r.getCommentsByIDs(ctx, keys, query)
 }

@@ -31,6 +31,7 @@ const (
 
 func (c *commentServiceImpl) CreateComment(ctx context.Context, postId string, parentID *string, author string, text string) (*entity.Comment, error) {
 	author = strings.TrimSpace(author)
+	text = strings.TrimSpace(text)
 
 	if author == "" {
 		return nil, fmt.Errorf("author cannot be empty")

@@ -1,6 +1,16 @@
 services:
+  # Сервис для запуска тестов
+  tests:
+    build:
+      context: .
+      target: tester
+    profiles: ["test"]
+    environment:
+      - STORAGE_TYPE=inmemory
+
   app-pg:
-    build: .
+    build:
+      context: .
     ports:
       - "8080:8080"
     profiles: ["postgres"]

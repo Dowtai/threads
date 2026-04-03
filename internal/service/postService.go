@@ -81,12 +81,17 @@ func (p *postServiceImpl) Posts(ctx context.Context, limit int32, offset int32) 
 }
 
 func (p *postServiceImpl) UpdateCommentsAllowed(ctx context.Context, postID string, author string, allowed bool) (*entity.Post, error) {
-	post, err := p.repo.UpdateCommentsAllowed(ctx, postID, allowed)
+	post, err := p.Post(ctx, postID)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("post not found")
 	}
 	if post.Author != author {
 		return nil, errors.New("author doesn't match with provided author")
+	}
+
+	post, err = p.repo.UpdateCommentsAllowed(ctx, postID, allowed)
+	if err != nil {
+		return nil, err
 	}
 
 	return post, nil

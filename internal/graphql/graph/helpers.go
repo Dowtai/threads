@@ -15,6 +15,7 @@ func MapPostToGraphQL(post *entity.Post) *Post {
 		Title:           post.Title,
 		Content:         post.Content,
 		CommentsAllowed: post.CommentsAllowed,
+		CreatedAt:       post.CreatedAt.GoString(),
 	}
 }
 
@@ -24,9 +25,10 @@ func MapCommentToGraphQL(comment *entity.Comment) *Comment {
 	}
 
 	return &Comment{
-		ID:     comment.ID,
-		Author: comment.Author,
-		Text:   comment.Text,
+		ID:        comment.ID,
+		Author:    comment.Author,
+		Text:      comment.Text,
+		CreatedAt: comment.CreatedAt.GoString(),
 	}
 }
 
