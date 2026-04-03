@@ -1,5 +1,4 @@
 services:
-  # Сервис для запуска тестов
   tests:
     build:
       context: .
