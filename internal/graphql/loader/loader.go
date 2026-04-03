@@ -14,35 +14,35 @@ type ctxKey string
 const loadersKey ctxKey = "dataloaders"
 
 type Loaders struct {
-	CommentsByPostID  *dataloader.Loader[string, []*entity.Comment]
-	RepliesByParentID *dataloader.Loader[string, []*entity.Comment]
+	CommentsByPostID  *dataloader.Loader[entity.ParamKey, []*entity.Comment]
+	RepliesByParentID *dataloader.Loader[entity.ParamKey, []*entity.Comment]
 }
 
 func Middleware(repo repo.Repo, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), loadersKey, &Loaders{
-			CommentsByPostID: dataloader.NewBatchedLoader(func(ctx context.Context, postIDs []string) []*dataloader.Result[[]*entity.Comment] {
-				comments, err := repo.GetCommentsByPostIDs(ctx, postIDs)
+			CommentsByPostID: dataloader.NewBatchedLoader(func(ctx context.Context, keys []entity.ParamKey) []*dataloader.Result[[]*entity.Comment] {
+				comments, err := repo.GetCommentsByPostIDs(ctx, keys)
 
-				results := make([]*dataloader.Result[[]*entity.Comment], len(postIDs))
-				for i, id := range postIDs {
+				results := make([]*dataloader.Result[[]*entity.Comment], len(keys))
+				for i, key := range keys {
 					if err != nil {
 						results[i] = &dataloader.Result[[]*entity.Comment]{Error: err}
 					} else {
-						results[i] = &dataloader.Result[[]*entity.Comment]{Data: comments[id]}
+						results[i] = &dataloader.Result[[]*entity.Comment]{Data: comments[key]}
 					}
 				}
 				return results
 			}),
-			RepliesByParentID: dataloader.NewBatchedLoader(func(ctx context.Context, parentIDs []string) []*dataloader.Result[[]*entity.Comment] {
-				comments, err := repo.GetRepliesByParentIDs(ctx, parentIDs)
+			RepliesByParentID: dataloader.NewBatchedLoader(func(ctx context.Context, keys []entity.ParamKey) []*dataloader.Result[[]*entity.Comment] {
+				comments, err := repo.GetRepliesByParentIDs(ctx, keys)
 
-				results := make([]*dataloader.Result[[]*entity.Comment], len(parentIDs))
-				for i, id := range parentIDs {
+				results := make([]*dataloader.Result[[]*entity.Comment], len(keys))
+				for i, key := range keys {
 					if err != nil {
 						results[i] = &dataloader.Result[[]*entity.Comment]{Error: err}
 					} else {
-						results[i] = &dataloader.Result[[]*entity.Comment]{Data: comments[id]}
+						results[i] = &dataloader.Result[[]*entity.Comment]{Data: comments[key]}
 					}
 				}
 				return results

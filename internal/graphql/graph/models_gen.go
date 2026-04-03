@@ -3,10 +3,11 @@
 package graph
 
 type Comment struct {
-	ID      string     `json:"id"`
-	Author  string     `json:"author"`
-	Text    string     `json:"text"`
-	Replies []*Comment `json:"replies"`
+	ID        string     `json:"id"`
+	Author    string     `json:"author"`
+	Text      string     `json:"text"`
+	Replies   []*Comment `json:"replies"`
+	CreatedAt string     `json:"createdAt"`
 }
 
 type Mutation struct {
@@ -19,6 +20,7 @@ type Post struct {
 	Content         string     `json:"content"`
 	Comments        []*Comment `json:"comments"`
 	CommentsAllowed bool       `json:"commentsAllowed"`
+	CreatedAt       string     `json:"createdAt"`
 }
 
 type Query struct {

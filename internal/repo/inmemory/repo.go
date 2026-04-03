@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"threads/internal/entity"
+	"time"
 )
 
 type repoImpl struct {
@@ -58,63 +59,25 @@ func (r *repoImpl) GetPosts(_ context.Context, limit, offset int) ([]*entity.Pos
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	if offset >= len(r.postsId) {
-		offset = len(r.postsId)
+	total := len(r.postsId)
+
+	if offset >= total {
+		offset = total
 		// ну или возвращать ошибку тут, или возвращать пустой список
 		// в целом мне кажется, что оба варианта норм
 	}
 
-	limit = min(limit, len(r.postsId)-offset)
+	limit = min(limit, total-offset)
 	posts := make([]*entity.Post, limit)
-	ids := r.postsId[offset : offset+limit]
 
-	for i, id := range ids {
+	for i := 0; i < limit; i++ {
+		realI := total - 1 - offset - i
+		id := r.postsId[realI]
 		post := *r.posts[id]
 		posts[i] = &post
 	}
 
 	return posts, nil
-}
-
-func (r *repoImpl) GetPostComments(_ context.Context, id string, limit, offset int) ([]*entity.Comment, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	commentsIds := r.postComments[id]
-	if offset >= len(commentsIds) {
-		offset = len(commentsIds)
-		// аналогично GetPosts
-	}
-	limit = min(limit, len(commentsIds)-offset)
-	comments := make([]*entity.Comment, limit)
-	ids := commentsIds[offset : offset+limit]
-
-	for i, id := range ids {
-		comment := *r.comments[id]
-		comments[i] = &comment
-	}
-
-	return comments, nil
-}
-
-func (r *repoImpl) GetCommentReplies(_ context.Context, id string, limit, offset int) ([]*entity.Comment, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	commentsIds := r.commentReplies[id]
-	if offset >= len(commentsIds) {
-		offset = len(commentsIds)
-	}
-	limit = min(limit, len(commentsIds)-offset)
-	comments := make([]*entity.Comment, limit)
-	ids := commentsIds[offset : offset+limit]
-
-	for i, id := range ids {
-		comment := *r.comments[id]
-		comments[i] = &comment
-	}
-
-	return comments, nil
 }
 
 func (r *repoImpl) StorePost(_ context.Context, post *entity.Post) (*entity.Post, error) {
@@ -129,6 +92,7 @@ func (r *repoImpl) StorePost(_ context.Context, post *entity.Post) (*entity.Post
 		return nil, errors.New("post already exists")
 	}
 
+	post.CreatedAt = time.Now().UTC()
 	r.posts[post.ID] = post
 	r.postsId = append(r.postsId, post.ID)
 
@@ -150,6 +114,7 @@ func (r *repoImpl) StoreComment(_ context.Context, comment *entity.Comment) (*en
 		return nil, errors.New("comment already exists")
 	}
 
+	comment.CreatedAt = time.Now().UTC()
 	r.comments[comment.ID] = comment
 
 	if comment.ParentID != nil {
@@ -176,17 +141,33 @@ func (r *repoImpl) UpdateCommentsAllowed(_ context.Context, postID string, allow
 	return &postCopy, nil
 }
 
-func (r *repoImpl) GetCommentsByPostIDs(_ context.Context, ids []string) (map[string][]*entity.Comment, error) {
+func (r *repoImpl) GetCommentsByPostIDs(_ context.Context, keys []entity.ParamKey) (map[entity.ParamKey][]*entity.Comment, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	result := make(map[string][]*entity.Comment)
-	for _, id := range ids {
-		postComments := r.postComments[id]
-		for _, cID := range postComments {
+	result := make(map[entity.ParamKey][]*entity.Comment)
+	for _, key := range keys {
+		limit := key.Limit
+		offset := key.Offset
+
+		postComments := r.postComments[key.Id]
+		total := len(postComments)
+
+		if offset >= total {
+			offset = total
+		}
+		limit = min(limit, total-offset)
+
+		result[key] = make([]*entity.Comment, limit)
+
+		for i := 0; i < limit; i++ {
+			realI := total - 1 - offset - i
+			cID := postComments[realI]
 			if comment, ok := r.comments[cID]; ok {
 				commentCopy := *comment
-				result[id] = append(result[id], &commentCopy)
+				result[key][i] = &commentCopy
+			} else {
+				return nil, errors.New("comment was lost")
 			}
 		}
 	}
@@ -194,17 +175,33 @@ func (r *repoImpl) GetCommentsByPostIDs(_ context.Context, ids []string) (map[st
 	return result, nil
 }
 
-func (r *repoImpl) GetRepliesByParentIDs(_ context.Context, ids []string) (map[string][]*entity.Comment, error) {
+func (r *repoImpl) GetRepliesByParentIDs(_ context.Context, keys []entity.ParamKey) (map[entity.ParamKey][]*entity.Comment, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	result := make(map[string][]*entity.Comment)
-	for _, id := range ids {
-		commentReplies := r.commentReplies[id]
-		for _, cID := range commentReplies {
+	result := make(map[entity.ParamKey][]*entity.Comment)
+	for _, key := range keys {
+		limit := key.Limit
+		offset := key.Offset
+
+		commentReplies := r.commentReplies[key.Id]
+		total := len(commentReplies)
+
+		if offset >= len(commentReplies) {
+			offset = len(commentReplies)
+		}
+		limit = min(limit, len(commentReplies)-offset)
+
+		result[key] = make([]*entity.Comment, limit)
+
+		for i := 0; i < limit; i++ {
+			realI := total - 1 - offset - i
+			cID := commentReplies[realI]
 			if comment, ok := r.comments[cID]; ok {
 				commentCopy := *comment
-				result[id] = append(result[id], &commentCopy)
+				result[key][i] = &commentCopy
+			} else {
+				return nil, errors.New("comment was lost")
 			}
 		}
 	}

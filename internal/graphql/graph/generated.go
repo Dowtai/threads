@@ -38,16 +38,17 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	Comment struct {
-		Author  func(childComplexity int) int
-		ID      func(childComplexity int) int
-		Replies func(childComplexity int, limit int32, offset int32) int
-		Text    func(childComplexity int) int
+		Author    func(childComplexity int) int
+		CreatedAt func(childComplexity int) int
+		ID        func(childComplexity int) int
+		Replies   func(childComplexity int, limit int32, offset int32) int
+		Text      func(childComplexity int) int
 	}
 
 	Mutation struct {
 		CreateComment         func(childComplexity int, postID string, parentID *string, author string, text string) int
 		CreatePost            func(childComplexity int, author string, title string, content string, commentsAllowed bool) int
-		UpdateCommentsAllowed func(childComplexity int, postID string, allowed bool) int
+		UpdateCommentsAllowed func(childComplexity int, postID string, author string, allowed bool) int
 	}
 
 	Post struct {
@@ -55,6 +56,7 @@ type ComplexityRoot struct {
 		Comments        func(childComplexity int, limit int32, offset int32) int
 		CommentsAllowed func(childComplexity int) int
 		Content         func(childComplexity int) int
+		CreatedAt       func(childComplexity int) int
 		ID              func(childComplexity int) int
 		Title           func(childComplexity int) int
 	}
@@ -75,7 +77,7 @@ type CommentResolver interface {
 type MutationResolver interface {
 	CreatePost(ctx context.Context, author string, title string, content string, commentsAllowed bool) (*Post, error)
 	CreateComment(ctx context.Context, postID string, parentID *string, author string, text string) (*Comment, error)
-	UpdateCommentsAllowed(ctx context.Context, postID string, allowed bool) (*Post, error)
+	UpdateCommentsAllowed(ctx context.Context, postID string, author string, allowed bool) (*Post, error)
 }
 type PostResolver interface {
 	Comments(ctx context.Context, obj *Post, limit int32, offset int32) ([]*Comment, error)
@@ -108,6 +110,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Comment.Author(childComplexity), true
+	case "Comment.createdAt":
+		if e.ComplexityRoot.Comment.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Comment.CreatedAt(childComplexity), true
 	case "Comment.id":
 		if e.ComplexityRoot.Comment.ID == nil {
 			break
@@ -164,7 +172,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.UpdateCommentsAllowed(childComplexity, args["postId"].(string), args["allowed"].(bool)), true
+		return e.ComplexityRoot.Mutation.UpdateCommentsAllowed(childComplexity, args["postId"].(string), args["author"].(string), args["allowed"].(bool)), true
 
 	case "Post.author":
 		if e.ComplexityRoot.Post.Author == nil {
@@ -195,6 +203,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Post.Content(childComplexity), true
+	case "Post.createdAt":
+		if e.ComplexityRoot.Post.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Post.CreatedAt(childComplexity), true
 	case "Post.id":
 		if e.ComplexityRoot.Post.ID == nil {
 			break
@@ -349,6 +363,7 @@ var sources = []*ast.Source{
     content: String!
     comments(limit: Int! = 10, offset: Int! = 0): [Comment!]!
     commentsAllowed: Boolean!
+    createdAt: String!
 }
 
 type Comment{
@@ -356,6 +371,7 @@ type Comment{
     author: ID!
     text: String!
     replies(limit: Int! = 10, offset: Int! = 0): [Comment!]!
+    createdAt: String!
 }
 
 type Query{
@@ -366,7 +382,7 @@ type Query{
 type Mutation{
     createPost(author: ID!, title: String!, content: String!, commentsAllowed: Boolean! = true): Post!
     createComment(postId: ID!, parentId: ID, author: ID!, text: String!): Comment!
-    updateCommentsAllowed(postId: ID!, allowed: Boolean!): Post!
+    updateCommentsAllowed(postId: ID!, author: ID!, allowed: Boolean!): Post!
 }
 
 type Subscription{
@@ -455,11 +471,16 @@ func (ec *executionContext) field_Mutation_updateCommentsAllowed_args(ctx contex
 		return nil, err
 	}
 	args["postId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "allowed", ec.unmarshalNBoolean2bool)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "author", ec.unmarshalNID2string)
 	if err != nil {
 		return nil, err
 	}
-	args["allowed"] = arg1
+	args["author"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "allowed", ec.unmarshalNBoolean2bool)
+	if err != nil {
+		return nil, err
+	}
+	args["allowed"] = arg2
 	return args, nil
 }
 
@@ -700,6 +721,8 @@ func (ec *executionContext) fieldContext_Comment_replies(ctx context.Context, fi
 				return ec.fieldContext_Comment_text(ctx, field)
 			case "replies":
 				return ec.fieldContext_Comment_replies(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Comment_createdAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Comment", field.Name)
 		},
@@ -714,6 +737,35 @@ func (ec *executionContext) fieldContext_Comment_replies(ctx context.Context, fi
 	if fc.Args, err = ec.field_Comment_replies_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Comment_createdAt(ctx context.Context, field graphql.CollectedField, obj *Comment) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Comment_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Comment_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Comment",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
 	}
 	return fc, nil
 }
@@ -755,6 +807,8 @@ func (ec *executionContext) fieldContext_Mutation_createPost(ctx context.Context
 				return ec.fieldContext_Post_comments(ctx, field)
 			case "commentsAllowed":
 				return ec.fieldContext_Post_commentsAllowed(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Post_createdAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Post", field.Name)
 		},
@@ -806,6 +860,8 @@ func (ec *executionContext) fieldContext_Mutation_createComment(ctx context.Cont
 				return ec.fieldContext_Comment_text(ctx, field)
 			case "replies":
 				return ec.fieldContext_Comment_replies(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Comment_createdAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Comment", field.Name)
 		},
@@ -832,7 +888,7 @@ func (ec *executionContext) _Mutation_updateCommentsAllowed(ctx context.Context,
 		ec.fieldContext_Mutation_updateCommentsAllowed,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().UpdateCommentsAllowed(ctx, fc.Args["postId"].(string), fc.Args["allowed"].(bool))
+			return ec.Resolvers.Mutation().UpdateCommentsAllowed(ctx, fc.Args["postId"].(string), fc.Args["author"].(string), fc.Args["allowed"].(bool))
 		},
 		nil,
 		ec.marshalNPost2ᚖthreadsᚋinternalᚋgraphqlᚋgraphᚐPost,
@@ -861,6 +917,8 @@ func (ec *executionContext) fieldContext_Mutation_updateCommentsAllowed(ctx cont
 				return ec.fieldContext_Post_comments(ctx, field)
 			case "commentsAllowed":
 				return ec.fieldContext_Post_commentsAllowed(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Post_createdAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Post", field.Name)
 		},
@@ -1028,6 +1086,8 @@ func (ec *executionContext) fieldContext_Post_comments(ctx context.Context, fiel
 				return ec.fieldContext_Comment_text(ctx, field)
 			case "replies":
 				return ec.fieldContext_Comment_replies(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Comment_createdAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Comment", field.Name)
 		},
@@ -1075,6 +1135,35 @@ func (ec *executionContext) fieldContext_Post_commentsAllowed(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Post_createdAt(ctx context.Context, field graphql.CollectedField, obj *Post) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Post_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Post_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Post",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_posts(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -1112,6 +1201,8 @@ func (ec *executionContext) fieldContext_Query_posts(ctx context.Context, field 
 				return ec.fieldContext_Post_comments(ctx, field)
 			case "commentsAllowed":
 				return ec.fieldContext_Post_commentsAllowed(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Post_createdAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Post", field.Name)
 		},
@@ -1167,6 +1258,8 @@ func (ec *executionContext) fieldContext_Query_post(ctx context.Context, field g
 				return ec.fieldContext_Post_comments(ctx, field)
 			case "commentsAllowed":
 				return ec.fieldContext_Post_commentsAllowed(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Post_createdAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Post", field.Name)
 		},
@@ -1326,6 +1419,8 @@ func (ec *executionContext) fieldContext_Subscription_commentAdded(ctx context.C
 				return ec.fieldContext_Comment_text(ctx, field)
 			case "replies":
 				return ec.fieldContext_Comment_replies(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Comment_createdAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Comment", field.Name)
 		},
@@ -2860,6 +2955,11 @@ func (ec *executionContext) _Comment(ctx context.Context, sel ast.SelectionSet, 
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "createdAt":
+			out.Values[i] = ec._Comment_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -3015,6 +3115,11 @@ func (ec *executionContext) _Post(ctx context.Context, sel ast.SelectionSet, obj
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "commentsAllowed":
 			out.Values[i] = ec._Post_commentsAllowed(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "createdAt":
+			out.Values[i] = ec._Post_createdAt(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}

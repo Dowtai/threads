@@ -22,7 +22,7 @@ func New(pool *pgxpool.Pool) *repoImpl {
 func (r *repoImpl) GetPost(ctx context.Context, id string) (*entity.Post, error) {
 	post := &entity.Post{}
 
-	query := `SELECT id, author, title, content, comments_allowed FROM posts where id = $1;`
+	query := `SELECT id, author, title, content, comments_allowed, created_at FROM posts where id = $1;`
 
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&post.ID,
@@ -30,6 +30,7 @@ func (r *repoImpl) GetPost(ctx context.Context, id string) (*entity.Post, error)
 		&post.Title,
 		&post.Content,
 		&post.CommentsAllowed,
+		&post.CreatedAt,
 	)
 
 	if err != nil {
@@ -46,7 +47,7 @@ func (r *repoImpl) GetPost(ctx context.Context, id string) (*entity.Post, error)
 func (r *repoImpl) GetComment(ctx context.Context, id string) (*entity.Comment, error) {
 	comment := &entity.Comment{}
 
-	query := `SELECT id, post_id, parent_id, author, text FROM comments where id = $1;`
+	query := `SELECT id, post_id, parent_id, author, text, created_at FROM comments where id = $1;`
 
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&comment.ID,
@@ -54,6 +55,7 @@ func (r *repoImpl) GetComment(ctx context.Context, id string) (*entity.Comment, 
 		&comment.ParentID,
 		&comment.Author,
 		&comment.Text,
+		&comment.CreatedAt,
 	)
 
 	if err != nil {
@@ -68,7 +70,8 @@ func (r *repoImpl) GetComment(ctx context.Context, id string) (*entity.Comment, 
 }
 
 func (r *repoImpl) GetPosts(ctx context.Context, limit, offset int) ([]*entity.Post, error) {
-	query := `SELECT id, author, title, content, comments_allowed FROM posts LIMIT $1 OFFSET $2;`
+	query := `SELECT id, author, title, content, comments_allowed, created_at FROM posts 
+    		  ORDER BY created_at DESC LIMIT $1 OFFSET $2;`
 
 	rows, err := r.pool.Query(ctx, query, limit, offset)
 	if err != nil {
@@ -87,6 +90,7 @@ func (r *repoImpl) GetPosts(ctx context.Context, limit, offset int) ([]*entity.P
 			&post.Title,
 			&post.Content,
 			&post.CommentsAllowed,
+			&post.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -101,76 +105,8 @@ func (r *repoImpl) GetPosts(ctx context.Context, limit, offset int) ([]*entity.P
 	return posts, nil
 }
 
-func (r *repoImpl) GetPostComments(ctx context.Context, id string, limit, offset int) ([]*entity.Comment, error) {
-	query := `SELECT id, post_id, parent_id, author, text FROM comments where post_id = $1 LIMIT $2 OFFSET $3;`
-
-	rows, err := r.pool.Query(ctx, query, id, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	comments := make([]*entity.Comment, 0)
-
-	for rows.Next() {
-		comment := &entity.Comment{}
-
-		err := rows.Scan(
-			&comment.ID,
-			&comment.PostID,
-			&comment.ParentID,
-			&comment.Author,
-			&comment.Text,
-		)
-		if err != nil {
-			return nil, err
-		}
-		comments = append(comments, comment)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return comments, nil
-}
-
-func (r *repoImpl) GetCommentReplies(ctx context.Context, id string, limit, offset int) ([]*entity.Comment, error) {
-	query := `SELECT id, post_id, parent_id, author, text FROM comments where parent_id = $1 LIMIT $2 OFFSET $3;`
-
-	rows, err := r.pool.Query(ctx, query, id, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	comments := make([]*entity.Comment, 0)
-
-	for rows.Next() {
-		comment := &entity.Comment{}
-
-		err := rows.Scan(
-			&comment.ID,
-			&comment.PostID,
-			&comment.ParentID,
-			&comment.Author,
-			&comment.Text,
-		)
-		if err != nil {
-			return nil, err
-		}
-		comments = append(comments, comment)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return comments, nil
-}
-
 func (r *repoImpl) StorePost(ctx context.Context, post *entity.Post) (*entity.Post, error) {
-	query := `INSERT INTO posts (id, author, title, content, comments_allowed) VALUES ($1, $2, $3, $4, $5);`
+	query := `INSERT INTO posts (id, author, title, content, comments_allowed, created_at) VALUES ($1, $2, $3, $4, $5, $6);`
 
 	_, err := r.pool.Exec(ctx, query,
 		post.ID,
@@ -178,6 +114,7 @@ func (r *repoImpl) StorePost(ctx context.Context, post *entity.Post) (*entity.Po
 		post.Title,
 		post.Content,
 		post.CommentsAllowed,
+		post.CreatedAt,
 	)
 
 	if err != nil {
@@ -188,7 +125,7 @@ func (r *repoImpl) StorePost(ctx context.Context, post *entity.Post) (*entity.Po
 }
 
 func (r *repoImpl) StoreComment(ctx context.Context, comment *entity.Comment) (*entity.Comment, error) {
-	query := `INSERT INTO comments (id, post_id, parent_id, author, text) VALUES ($1, $2, $3, $4, $5);`
+	query := `INSERT INTO comments (id, post_id, parent_id, author, text, created_at) VALUES ($1, $2, $3, $4, $5, $6);`
 
 	_, err := r.pool.Exec(ctx, query,
 		comment.ID,
@@ -196,6 +133,7 @@ func (r *repoImpl) StoreComment(ctx context.Context, comment *entity.Comment) (*
 		comment.ParentID,
 		comment.Author,
 		comment.Text,
+		comment.CreatedAt,
 	)
 
 	if err != nil {
@@ -208,7 +146,7 @@ func (r *repoImpl) StoreComment(ctx context.Context, comment *entity.Comment) (*
 func (r *repoImpl) UpdateCommentsAllowed(ctx context.Context, postID string, allowed bool) (*entity.Post, error) {
 	post := &entity.Post{}
 
-	query := `UPDATE posts SET comments_allowed = $1 where id = $2 RETURNING id, author, title, content, comments_allowed;`
+	query := `UPDATE posts SET comments_allowed = $1 where id = $2 RETURNING id, author, title, content, comments_allowed, created_at;`
 
 	err := r.pool.QueryRow(ctx, query, allowed, postID).Scan(
 		&post.ID,
@@ -216,6 +154,7 @@ func (r *repoImpl) UpdateCommentsAllowed(ctx context.Context, postID string, all
 		&post.Title,
 		&post.Content,
 		&post.CommentsAllowed,
+		&post.CreatedAt,
 	)
 
 	if err != nil {
@@ -229,64 +168,146 @@ func (r *repoImpl) UpdateCommentsAllowed(ctx context.Context, postID string, all
 	return post, nil
 }
 
-func (r *repoImpl) GetCommentsByPostIDs(ctx context.Context, ids []string) (map[string][]*entity.Comment, error) {
-	query := `SELECT id, post_id, parent_id, author, text FROM comments WHERE post_id = ANY($1) AND parent_id IS NULL`
+func (r *repoImpl) GetCommentsByPostIDs(ctx context.Context, keys []entity.ParamKey) (map[entity.ParamKey][]*entity.Comment, error) {
+	ids := make([]string, len(keys))
+	limits := make([]int, len(keys))
+	offsets := make([]int, len(keys))
 
-	rows, err := r.pool.Query(ctx, query, ids)
+	for i, key := range keys {
+		ids[i] = key.Id
+		limits[i] = key.Limit
+		offsets[i] = key.Offset
+	}
+
+	query := `SELECT
+					req.id, req.limit_val, req.offset_val,
+                    c.id, c.post_id, c.parent_id, c.author, c.text, c.created_at
+              FROM unnest($1::uuid[], $2::int[], $3::int[]) AS req(id, limit_val, offset_val)
+              CROSS JOIN LATERAL(
+                  SELECT id, post_id, parent_id, author, text, created_at
+                  FROM comments
+                  WHERE post_id = req.id AND parent_id IS NULL
+                  ORDER BY created_at DESC
+                  LIMIT req.limit_val OFFSET req.offset_val
+              ) c`
+
+	rows, err := r.pool.Query(ctx, query, ids, limits, offsets)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	result := make(map[string][]*entity.Comment)
+	result := make(map[entity.ParamKey][]*entity.Comment)
 	for rows.Next() {
+		var reqID string
+		var reqLimit int
+		var reqOffset int
 		comment := &entity.Comment{}
 
 		err := rows.Scan(
+			&reqID,
+			&reqLimit,
+			&reqOffset,
 			&comment.ID,
 			&comment.PostID,
 			&comment.ParentID,
 			&comment.Author,
 			&comment.Text,
+			&comment.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
 		}
 
-		result[comment.PostID] = append(result[comment.PostID], comment)
+		key := entity.ParamKey{
+			Id:     reqID,
+			Limit:  reqLimit,
+			Offset: reqOffset,
+		}
+
+		result[key] = append(result[key], comment)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for _, key := range keys {
+		if _, ok := result[key]; !ok {
+			result[key] = make([]*entity.Comment, 0)
+		}
 	}
 
 	return result, nil
 }
 
-func (r *repoImpl) GetRepliesByParentIDs(ctx context.Context, ids []string) (map[string][]*entity.Comment, error) {
-	query := `SELECT id, post_id, parent_id, author, text FROM comments WHERE parent_id = ANY($1)`
+func (r *repoImpl) GetRepliesByParentIDs(ctx context.Context, keys []entity.ParamKey) (map[entity.ParamKey][]*entity.Comment, error) {
+	ids := make([]string, len(keys))
+	limits := make([]int, len(keys))
+	offsets := make([]int, len(keys))
 
-	rows, err := r.pool.Query(ctx, query, ids)
+	for i, key := range keys {
+		ids[i] = key.Id
+		limits[i] = key.Limit
+		offsets[i] = key.Offset
+	}
+
+	query := `SELECT
+					req.id, req.limit_val, req.offset_val,
+                    c.id, c.post_id, c.parent_id, c.author, c.text, c.created_at
+              FROM unnest($1::uuid[], $2::int[], $3::int[]) AS req(id, limit_val, offset_val)
+              CROSS JOIN LATERAL(
+                  SELECT id, post_id, parent_id, author, text, created_at
+                  FROM comments
+                  WHERE parent_id = req.id
+                  ORDER BY created_at DESC
+                  LIMIT req.limit_val OFFSET req.offset_val
+              ) c`
+
+	rows, err := r.pool.Query(ctx, query, ids, limits, offsets)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	result := make(map[string][]*entity.Comment)
+	result := make(map[entity.ParamKey][]*entity.Comment)
 	for rows.Next() {
+		var reqID string
+		var reqLimit int
+		var reqOffset int
 		comment := &entity.Comment{}
 
 		err := rows.Scan(
+			&reqID,
+			&reqLimit,
+			&reqOffset,
 			&comment.ID,
 			&comment.PostID,
 			&comment.ParentID,
 			&comment.Author,
 			&comment.Text,
+			&comment.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
 		}
 
-		if comment.ParentID != nil {
-			result[*comment.ParentID] = append(result[*comment.ParentID], comment)
-		} else {
-			return nil, errors.New("something terrible went wrong: parent not found but unreachable case")
+		key := entity.ParamKey{
+			Id:     reqID,
+			Limit:  reqLimit,
+			Offset: reqOffset,
+		}
+
+		result[key] = append(result[key], comment)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for _, key := range keys {
+		if _, ok := result[key]; !ok {
+			result[key] = make([]*entity.Comment, 0)
 		}
 	}
 

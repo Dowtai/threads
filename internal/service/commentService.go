@@ -39,7 +39,7 @@ func (c *commentServiceImpl) CreateComment(ctx context.Context, postId string, p
 		return nil, fmt.Errorf("text cannot be empty")
 	}
 	if utf8.RuneCountInString(text) > commentMaxLen {
-		return nil, fmt.Errorf("comment's text is too long")
+		return nil, fmt.Errorf("comment's text cannot contain more than %d characters", commentMaxLen)
 	}
 
 	if parentID != nil {

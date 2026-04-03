@@ -1,0 +1,2 @@
+ALTER TABLE comments DROP COLUMN IF EXISTS created_at;
+ALTER TABLE posts DROP COLUMN IF EXISTS created_at;

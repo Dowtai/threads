@@ -8,8 +8,33 @@ package graph
 import (
 	"context"
 	"errors"
+	"threads/internal/entity"
 	"threads/internal/graphql/loader"
 )
+
+// Replies is the resolver for the replies field.
+func (r *commentResolver) Replies(ctx context.Context, obj *Comment, limit int32, offset int32) ([]*Comment, error) {
+	if limit < 0 {
+		return nil, errors.New("limit must be non-negative")
+	}
+	if offset < 0 {
+		return nil, errors.New("offset must be non-negative")
+	}
+
+	comments, err := loader.For(ctx).RepliesByParentID.
+		Load(ctx, entity.ParamKey{Id: obj.ID, Limit: int(limit), Offset: int(offset)})()
+	if err != nil {
+		return nil, err
+	}
+
+	intOffset := int(offset)
+	if intOffset > len(comments) {
+		intOffset = len(comments)
+	}
+	intLimit := min(int(limit), len(comments)-intOffset)
+
+	return MapCommentListToGraphQL(comments[intOffset : intOffset+intLimit]), nil
+}
 
 // CreatePost is the resolver for the createPost field.
 func (r *mutationResolver) CreatePost(ctx context.Context, author string, title string, content string, commentsAllowed bool) (*Post, error) {
@@ -34,8 +59,8 @@ func (r *mutationResolver) CreateComment(ctx context.Context, postID string, par
 }
 
 // UpdateCommentsAllowed is the resolver for the updateCommentsAllowed field.
-func (r *mutationResolver) UpdateCommentsAllowed(ctx context.Context, postID string, allowed bool) (*Post, error) {
-	post, err := r.PostService.UpdateCommentsAllowed(ctx, postID, allowed)
+func (r *mutationResolver) UpdateCommentsAllowed(ctx context.Context, postID string, author string, allowed bool) (*Post, error) {
+	post, err := r.PostService.UpdateCommentsAllowed(ctx, postID, author, allowed)
 	if err != nil {
 		return nil, err
 	}
@@ -52,30 +77,8 @@ func (r *postResolver) Comments(ctx context.Context, obj *Post, limit int32, off
 		return nil, errors.New("offset must be non-negative")
 	}
 
-	comments, err := loader.For(ctx).CommentsByPostID.Load(ctx, obj.ID)()
-	if err != nil {
-		return nil, err
-	}
-
-	intOffset := int(offset)
-	if intOffset > len(comments) {
-		intOffset = len(comments)
-	}
-	intLimit := min(int(limit), len(comments)-intOffset)
-
-	return MapCommentListToGraphQL(comments[intOffset : intOffset+intLimit]), nil
-}
-
-// Replies is the resolver for the replies field.
-func (r *commentResolver) Replies(ctx context.Context, obj *Comment, limit int32, offset int32) ([]*Comment, error) {
-	if limit < 0 {
-		return nil, errors.New("limit must be non-negative")
-	}
-	if offset < 0 {
-		return nil, errors.New("offset must be non-negative")
-	}
-
-	comments, err := loader.For(ctx).RepliesByParentID.Load(ctx, obj.ID)()
+	comments, err := loader.For(ctx).CommentsByPostID.
+		Load(ctx, entity.ParamKey{Id: obj.ID, Limit: int(limit), Offset: int(offset)})()
 	if err != nil {
 		return nil, err
 	}

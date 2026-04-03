@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
 	"threads/internal/entity"
 	"threads/internal/repo"
 
@@ -15,7 +14,7 @@ import (
 type PostService interface {
 	CreatePost(ctx context.Context, author string, title string, content string, commentsAllowed bool) (*entity.Post, error)
 	Post(ctx context.Context, id string) (*entity.Post, error)
-	UpdateCommentsAllowed(ctx context.Context, postID string, allowed bool) (*entity.Post, error)
+	UpdateCommentsAllowed(ctx context.Context, postID string, author string, allowed bool) (*entity.Post, error)
 	Posts(ctx context.Context, limit int32, offset int32) ([]*entity.Post, error)
 }
 
@@ -81,10 +80,13 @@ func (p *postServiceImpl) Posts(ctx context.Context, limit int32, offset int32) 
 	return posts, nil
 }
 
-func (p *postServiceImpl) UpdateCommentsAllowed(ctx context.Context, postID string, allowed bool) (*entity.Post, error) {
+func (p *postServiceImpl) UpdateCommentsAllowed(ctx context.Context, postID string, author string, allowed bool) (*entity.Post, error) {
 	post, err := p.repo.UpdateCommentsAllowed(ctx, postID, allowed)
 	if err != nil {
 		return nil, err
+	}
+	if post.Author != author {
+		return nil, errors.New("author doesn't match with provided author")
 	}
 
 	return post, nil
