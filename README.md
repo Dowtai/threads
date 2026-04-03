@@ -6,11 +6,13 @@
 
 ## Основные технологии и библиотеки
 
-В проекте используется современный стек технологий для Go-разработки:
+В проекте используются следующие либы:
 
 * **[99designs/gqlgen](https://github.com/99designs/gqlgen)** - кодоген GraphQL
 * **[jackc/pgx/v5](https://github.com/jackc/pgx)** - для работы с PostgreSQL запросами
 * **[golang-migrate/migrate](https://github.com/golang-migrate/migrate)** - для управления миграциями БД
+* **[stretchr/testify](https://github.com/stretchr/testify)** — тесты
+* **[pashagolub/pgxmock](https://github.com/pashagolub/pgxmock)** — моки postgres
 
 ## Запуск без базы данных
 
